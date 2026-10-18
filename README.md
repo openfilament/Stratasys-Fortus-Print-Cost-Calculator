@@ -1,6 +1,6 @@
 # Stratasys Fortus True Print Cost Calculator
 
-**[Try the live calculator →](https://openfilament.com/stratasys-print-cost-calculator/)**
+**[Try the live calculator →](https://openfilament.com/stratasys-fortus-true-print-cost-calculator/)**
 
 A free, open-source calculator that shows what a print job on a Stratasys Fortus FDM printer really costs. Enter the model volume, support volume and build time from Insight or GrabCAD Print, and it breaks the job down into material, consumables, chamber energy, machine overhead, labor and scrap.
 
