@@ -6,7 +6,6 @@ A free, open-source calculator that shows what a print job on a Stratasys Fortus
 
 Built by [OpenFilament](https://openfilament.com), open filament for Stratasys uPrint, Dimension and Fortus printers.
 
-![Cost calculator showing a $385.83 total for an ULTEM 9085 job on a Fortus 450mc](docs/preview.png)
 
 ## What it calculates
 
