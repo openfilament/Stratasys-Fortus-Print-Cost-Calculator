@@ -1,0 +1,607 @@
+<title>Fortus Print Cost Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+  /* Layout: soft-grey canvas, white input sheet on the left, sticky receipt-style results on the right */
+  :root {
+    --canvas: #f6f8fb;
+    --surface: #ffffff;
+    --surface-2: #f6f8fb;
+    --ink: #0a2540;
+    --ink-2: #425466;
+    --ink-3: #6b7c93;
+    --line: #e3e8ee;
+    --line-strong: #cfd7df;
+    --accent: #005fd6;
+    --accent-soft: rgba(0, 95, 214, 0.14);
+    --warn-bg: #fff8eb;
+    --warn-line: #f5d6a3;
+    --warn-ink: #8a4b08;
+    --shadow: 0 1px 1px rgba(10,37,64,.04), 0 2px 6px rgba(10,37,64,.05), 0 12px 32px -12px rgba(50,50,93,.12);
+
+    --c-mat: #005fd6;
+    --c-cons: #5aa9ff;
+    --c-energy: #f59a3e;
+    --c-mach: #0f9f8f;
+    --c-post: #a9c8f0;
+    --c-labor: #8792a2;
+
+    --font: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --canvas: #0a1626; --surface: #0f1f33; --surface-2: #13263d;
+      --ink: #f1f5fa; --ink-2: #b4c0cf; --ink-3: #8597ab;
+      --line: #1f3550; --line-strong: #2b4565;
+      --accent: #4d94ff; --accent-soft: rgba(77, 148, 255,.22);
+      --warn-bg: #2a1f0c; --warn-line: #6b4a12; --warn-ink: #f5c77a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.5);
+      --c-mat: #4d94ff; --c-labor: #6b7c93;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --canvas: #0a1626; --surface: #0f1f33; --surface-2: #13263d;
+    --ink: #f1f5fa; --ink-2: #b4c0cf; --ink-3: #8597ab;
+    --line: #1f3550; --line-strong: #2b4565;
+    --accent: #4d94ff; --accent-soft: rgba(77, 148, 255,.22);
+    --warn-bg: #2a1f0c; --warn-line: #6b4a12; --warn-ink: #f5c77a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.5);
+    --c-mat: #4d94ff; --c-labor: #6b7c93;
+    color-scheme: dark;
+  }
+
+  body { background: var(--canvas); color: var(--ink); }
+
+  .fortus-calc-wrapper, .fortus-calc-wrapper *, .fortus-calc-wrapper *::before, .fortus-calc-wrapper *::after { box-sizing: border-box; }
+
+  .fortus-calc-wrapper {
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 1160px;
+    margin: 0 auto;
+    padding-block: 48px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .fc-header { display: grid; gap: 8px; margin-bottom: 32px; max-width: 640px; }
+  .fc-eyebrow { font-size: 13px; font-weight: 500; color: var(--accent); }
+  .fc-header h1 {
+    margin: 0; font-size: clamp(26px, 3.4vw, 34px); font-weight: 600;
+    letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance;
+  }
+  .fc-header p { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+  /* Grid */
+  .fc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .fc-grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .fc-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+  .fc-results { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); }
+  @media (max-width: 900px) { .fc-results { position: static; } }
+
+  .fc-section { padding: 24px; display: grid; gap: 16px; }
+  .fc-section + .fc-section { border-top: 1px solid var(--line); }
+  .fc-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .fc-section-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .fc-section-hint { font-size: 13px; color: var(--ink-3); }
+
+  /* Fields */
+  .fc-field { display: grid; gap: 6px; min-width: 0; }
+  .fc-field label { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+  .fc-sublabel { font-weight: 400; color: var(--ink-3); }
+  .fc-row-2, .fc-row-3 { display: grid; gap: 12px; }
+  .fc-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fc-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 480px) { .fc-row-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .fc-input, .fc-select {
+    width: 100%; height: 38px; padding: 0 12px;
+    font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    box-shadow: 0 1px 1px rgba(10,37,64,.04);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .fc-input { font-family: var(--mono); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .fc-input::placeholder { color: var(--ink-3); font-family: var(--font); }
+  .fc-select {
+    appearance: none; -webkit-appearance: none; padding-right: 34px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%238792a2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  .fc-input:hover, .fc-select:hover { border-color: var(--ink-3); }
+  .fc-input:focus, .fc-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .fc-input-suffix { position: relative; }
+  .fc-input-suffix input { padding-right: 44px; }
+  .fc-input-suffix span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--ink-3); pointer-events: none; }
+
+  .fc-alert {
+    display: none; background: var(--warn-bg); color: var(--warn-ink);
+    border: 1px solid var(--warn-line); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-size: 13px;
+  }
+
+  /* Toggles */
+  .fc-toggles { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+  .fc-checkbox-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; cursor: pointer; background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
+  .fc-checkbox-row strong { font-weight: 500; color: var(--ink); font-family: var(--mono); font-size: 12.5px; }
+  .fc-checkbox-row input {
+    appearance: none; -webkit-appearance: none; flex: none; width: 32px; height: 18px; border-radius: 99px;
+    background: var(--line-strong); position: relative; cursor: pointer; transition: background .15s; margin: 0;
+  }
+  .fc-checkbox-row input::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(10,37,64,.25); transition: transform .15s;
+  }
+  .fc-checkbox-row input:checked { background: var(--accent); }
+  .fc-checkbox-row input:checked::after { transform: translateX(14px); }
+  .fc-checkbox-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Advanced */
+  .fc-details summary {
+    list-style: none; cursor: pointer; user-select: none;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  .fc-details summary::-webkit-details-marker { display: none; }
+  .fc-details summary .fc-summary-action { font-size: 13px; font-weight: 500; color: var(--accent); display: inline-flex; align-items: center; gap: 4px; }
+  .fc-details summary .fc-chev { transition: transform .2s; }
+  .fc-details[open] summary .fc-chev { transform: rotate(90deg); }
+  .fc-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+  .fc-details-body { display: grid; gap: 16px; margin-top: 16px; }
+
+  /* Results: hero total */
+  .fc-total-block { padding: 28px 24px 24px; display: grid; gap: 20px; }
+  .fc-total-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .fc-kpi-label { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+  .fc-total-value { font-size: clamp(36px, 5vw, 48px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .fc-kpi-sub { font-size: 13px; color: var(--ink-3); margin-top: 6px; }
+  .fc-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    font-size: 12px; font-weight: 500; border-radius: 99px;
+    background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+  }
+
+  .fc-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  .fc-stat { padding: 14px 16px; min-width: 0; }
+  .fc-stat + .fc-stat { border-left: 1px solid var(--line); }
+  .fc-stat-value { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .fc-stat .fc-kpi-sub { margin-top: 2px; font-size: 12px; }
+
+  /* Distribution */
+  .fc-stack-bar { height: 8px; display: flex; gap: 2px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
+  .fc-stack-seg { height: 100%; transition: width .3s ease; }
+  .fc-stack-seg:first-child { border-radius: 99px 0 0 99px; }
+  .fc-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--ink-3); margin-top: 12px; }
+  .fc-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .fc-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+
+  /* Table */
+  .fc-table-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+  .fc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .fc-table th {
+    text-align: left; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-3); padding: 12px 24px 10px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  }
+  .fc-table th:not(:first-child), .fc-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+  .fc-table th:not(:first-child):not(:last-child), .fc-table td:not(:first-child):not(:last-child) { padding-left: 8px; padding-right: 8px; }
+  .fc-table td { padding: 14px 24px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+  .fc-table td:not(:first-child) { font-family: var(--mono); font-size: 13px; padding-top: 15px; }
+  .fc-table td[id^="pct-"] { color: var(--ink-3); }
+  .fc-table tbody tr:not(.fc-total-row):hover td { background: var(--surface-2); }
+  .fc-item-title { font-weight: 500; display: flex; align-items: center; gap: 10px; }
+  .fc-item-formula { font-size: 12px; color: var(--ink-3); margin-top: 3px; padding-left: 18px; font-family: var(--mono); line-height: 1.5; }
+  .fc-scrap-dot { background: transparent; border: 1px dashed var(--ink-3); }
+  .fc-table tr.fc-total-row td { border-bottom: none; font-weight: 600; font-size: 15px; padding-block: 18px 22px; }
+  .fc-table tr.fc-total-row td:last-child { font-size: 15px; color: var(--ink); }
+
+  @media (max-width: 560px) {
+    .fc-section, .fc-total-block { padding-left: 18px; padding-right: 18px; }
+    .fc-table th, .fc-table td { padding-left: 16px; padding-right: 16px; }
+    .fc-table th:nth-child(2), .fc-table td:nth-child(2) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .fortus-calc-wrapper * { transition: none !important; } }
+</style>
+
+<div class="fortus-calc-wrapper">
+  <header class="fc-header">
+    <span class="fc-eyebrow">Stratasys Fortus · Internal costing</span>
+    <h1>True print cost calculator</h1>
+    <p>Zero-margin cost per job across material, consumables, chamber energy, machine overhead and labor.</p>
+  </header>
+
+  <div class="fc-grid">
+    <!-- INPUTS -->
+    <div class="fc-card">
+      <section class="fc-section">
+        <div class="fc-section-head">
+          <h2 class="fc-section-title">Machine &amp; material</h2>
+        </div>
+
+        <div id="fc-compat-alert" class="fc-alert"></div>
+
+        <div class="fc-field">
+          <label for="fc-machine">Machine</label>
+          <select id="fc-machine" class="fc-select">
+            <option value="360mc">Fortus 360mc (T-Class)</option>
+            <option value="400mc">Fortus 400mc (T-Class)</option>
+            <option value="380mc">Fortus 380mc (K-Class)</option>
+            <option value="450mc" selected="">Fortus 450mc (K-Class)</option>
+            <option value="900mc">Fortus 900mc (900-Class Gen 1/2)</option>
+            <option value="F900">Stratasys F900 (900-Class Gen 3)</option>
+          </select>
+        </div>
+
+        <div class="fc-field">
+          <label for="fc-material">Material</label>
+          <select id="fc-material" class="fc-select">
+            <option value="ABS">ABS-M30 / ASA / ABS-ESD7</option>
+            <option value="PC">PC / PC-ABS / PC-ISO</option>
+            <option value="N12CF">Nylon 12CF Carbon Fiber</option>
+            <option value="ULTEM9085" selected="">ULTEM 9085</option>
+            <option value="ULTEM1010">ULTEM 1010 / PPSF</option>
+          </select>
+        </div>
+
+        <div class="fc-field">
+            <label for="fc-filament-source">Filament source</label>
+            <select id="fc-filament-source" class="fc-select">
+              <option value="oem">Stratasys OEM canister</option>
+              <option value="open">3rd-party / open</option>
+            </select>
+          </div>
+          <div class="fc-field">
+            <label for="fc-overhead-mode">Machine overhead</label>
+            <select id="fc-overhead-mode" class="fc-select">
+              <option value="pm" selected="">Refurb / in-house PM</option>
+              <option value="oem">New CapEx + OEM contract</option>
+              <option value="none">Marginal only ($0/hr)</option>
+            </select>
+          </div>
+      </section>
+
+      <section class="fc-section">
+        <div class="fc-section-head">
+          <h2 class="fc-section-title">Job parameters</h2>
+          <span class="fc-section-hint">From Insight or GrabCAD Print</span>
+        </div>
+
+        <div class="fc-row-3">
+          <div class="fc-field">
+            <label for="fc-vol-model">Model volume</label>
+            <div class="fc-input-suffix">
+              <input type="number" id="fc-vol-model" class="fc-input" value="18.50" min="0" step="0.1">
+              <span>in³</span>
+            </div>
+          </div>
+          <div class="fc-field">
+            <label for="fc-vol-support">Support volume</label>
+            <div class="fc-input-suffix">
+              <input type="number" id="fc-vol-support" class="fc-input" value="5.25" min="0" step="0.1">
+              <span>in³</span>
+            </div>
+          </div>
+          <div class="fc-field">
+            <label for="fc-time-hrs">Build time</label>
+            <div class="fc-input-suffix">
+              <input type="number" id="fc-time-hrs" class="fc-input" value="14.5" min="0" step="0.25">
+              <span>hrs</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="fc-toggles">
+          <label class="fc-checkbox-row">
+            <span>Cold-chamber warmup soak · <strong id="fc-warmup-label">1.00 hr</strong></span>
+            <input type="checkbox" id="fc-cold-start" checked="">
+          </label>
+          <label class="fc-checkbox-row">
+            <span>Facility HVAC heat removal · <strong>+33% kW</strong></span>
+            <input type="checkbox" id="fc-hvac-load" checked="">
+          </label>
+        </div>
+      </section>
+
+      <section class="fc-section">
+        <details class="fc-details">
+          <summary>
+            Rates &amp; overrides
+            <span class="fc-summary-action">Edit
+              <svg class="fc-chev" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9"></path></svg>
+            </span>
+          </summary>
+          <div class="fc-details-body">
+            <div class="fc-row-2">
+              <div class="fc-field">
+                <label for="fc-rate-kwh">Electricity <span class="fc-sublabel">$/kWh</span></label>
+                <input type="number" id="fc-rate-kwh" class="fc-input" value="0.11" min="0" step="0.01">
+              </div>
+              <div class="fc-field">
+                <label for="fc-waste-pct">Canister tail/purge <span class="fc-sublabel">%</span></label>
+                <input type="number" id="fc-waste-pct" class="fc-input" value="4.0" min="0" max="30" step="0.5">
+              </div>
+            </div>
+            <div class="fc-row-3">
+              <div class="fc-field">
+                <label for="fc-labor-hrs">Touch labor <span class="fc-sublabel">hr</span></label>
+                <input type="number" id="fc-labor-hrs" class="fc-input" value="0.50" min="0" step="0.1">
+              </div>
+              <div class="fc-field">
+                <label for="fc-labor-rate">Labor rate <span class="fc-sublabel">$/hr</span></label>
+                <input type="number" id="fc-labor-rate" class="fc-input" value="45.00" min="0" step="1">
+              </div>
+              <div class="fc-field">
+                <label for="fc-scrap-pct">Scrap risk <span class="fc-sublabel">%</span></label>
+                <input type="number" id="fc-scrap-pct" class="fc-input" value="3.0" min="0" max="50" step="0.5">
+              </div>
+            </div>
+            <div class="fc-row-2">
+              <div class="fc-field">
+                <label for="fc-override-model">Model price <span class="fc-sublabel">$/in³</span></label>
+                <input type="number" id="fc-override-model" class="fc-input" placeholder="Auto" min="0" step="0.05">
+              </div>
+              <div class="fc-field">
+                <label for="fc-override-support">Support price <span class="fc-sublabel">$/in³</span></label>
+                <input type="number" id="fc-override-support" class="fc-input" placeholder="Auto" min="0" step="0.05">
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="fc-card fc-results">
+      <div class="fc-total-block">
+        <div class="fc-total-top">
+          <div>
+            <div class="fc-kpi-label">Total burdened cost</div>
+            <div class="fc-total-value" id="fc-out-total">$0.00</div>
+            <div class="fc-kpi-sub" id="fc-out-scrap-note">Includes 3.0% scrap allowance</div>
+          </div>
+          <span id="fc-active-summary" class="fc-badge">Fortus 450mc • ULTEM 9085</span>
+        </div>
+
+        <div class="fc-stats">
+          <div class="fc-stat">
+            <div class="fc-kpi-label">Out-of-pocket</div>
+            <div class="fc-stat-value" id="fc-out-marginal">$0.00</div>
+            <div class="fc-kpi-sub">Excludes machine &amp; labor</div>
+          </div>
+          <div class="fc-stat">
+            <div class="fc-kpi-label">Per in³</div>
+            <div class="fc-stat-value" id="fc-out-per-in3">$0.00</div>
+            <div class="fc-kpi-sub" id="fc-out-per-hr">$0.00 / build hr</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="fc-stack-bar" role="img" aria-label="Cost distribution by component">
+            <div id="seg-mat" class="fc-stack-seg" style="background: var(--c-mat); width: 50%;"></div>
+            <div id="seg-cons" class="fc-stack-seg" style="background: var(--c-cons); width: 10%;"></div>
+            <div id="seg-energy" class="fc-stack-seg" style="background: var(--c-energy); width: 10%;"></div>
+            <div id="seg-mach" class="fc-stack-seg" style="background: var(--c-mach); width: 15%;"></div>
+            <div id="seg-post" class="fc-stack-seg" style="background: var(--c-post); width: 5%;"></div>
+            <div id="seg-labor" class="fc-stack-seg" style="background: var(--c-labor); width: 10%;"></div>
+          </div>
+          <div class="fc-legend">
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-mat);"></span>Material</span>
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-cons);"></span>Sheet &amp; tips</span>
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-energy);"></span>Energy</span>
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-mach);"></span>Machine</span>
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-post);"></span>Support wash</span>
+            <span class="fc-legend-item"><span class="fc-dot" style="background: var(--c-labor);"></span>Labor</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc-table-wrap">
+        <table class="fc-table">
+          <thead>
+            <tr><th>Component</th><th>Share</th><th>Cost</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-mat);"></span>Model &amp; support material</div><div class="fc-item-formula" id="desc-mat">--</div></td>
+              <td id="pct-mat">0%</td><td id="val-mat">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-cons);"></span>Build sheet &amp; tip wear</div><div class="fc-item-formula" id="desc-cons">--</div></td>
+              <td id="pct-cons">0%</td><td id="val-cons">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-energy);"></span>Chamber &amp; machine electricity</div><div class="fc-item-formula" id="desc-energy">--</div></td>
+              <td id="pct-energy">0%</td><td id="val-energy">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-mach);"></span>Maintenance &amp; depreciation</div><div class="fc-item-formula" id="desc-mach">--</div></td>
+              <td id="pct-mach">0%</td><td id="val-mach">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-post);"></span>Support removal</div><div class="fc-item-formula" id="desc-post">--</div></td>
+              <td id="pct-post">0%</td><td id="val-post">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot" style="background: var(--c-labor);"></span>Operator touch labor</div><div class="fc-item-formula" id="desc-labor">--</div></td>
+              <td id="pct-labor">0%</td><td id="val-labor">$0.00</td>
+            </tr>
+            <tr>
+              <td><div class="fc-item-title"><span class="fc-dot fc-scrap-dot"></span>Scrap allowance</div><div class="fc-item-formula" id="desc-scrap">--</div></td>
+              <td id="pct-scrap">0%</td><td id="val-scrap">$0.00</td>
+            </tr>
+            <tr class="fc-total-row">
+              <td>Total</td><td>100%</td><td id="val-total-table">$0.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const MACHINES = {
+    "360mc": { name: "Fortus 360mc", highTempCapable: false, thermalMult: 0.95, airKw: 0.0, warmupScale: 1.0, sheetMult: 1.0, rates: { oem: 9.30, pm: 1.59, none: 0.0 } },
+    "400mc": { name: "Fortus 400mc", highTempCapable: true, thermalMult: 1.05, airKw: 0.25, warmupScale: 1.05, sheetMult: 1.0, rates: { oem: 13.02, pm: 2.27, none: 0.0 } },
+    "380mc": { name: "Fortus 380mc", highTempCapable: false, thermalMult: 1.00, airKw: 0.0, warmupScale: 0.90, sheetMult: 0.90, rates: { oem: 11.03, pm: 2.50, none: 0.0 } },
+    "450mc": { name: "Fortus 450mc", highTempCapable: true, thermalMult: 1.05, airKw: 0.0, warmupScale: 1.00, sheetMult: 1.0, rates: { oem: 16.17, pm: 4.64, none: 0.0 } },
+    "900mc": { name: "Fortus 900mc", highTempCapable: true, thermalMult: 2.05, airKw: 0.85, warmupScale: 1.60, sheetMult: 2.20, rates: { oem: 28.48, pm: 6.36, none: 0.0 } },
+    "F900":  { name: "Stratasys F900", highTempCapable: true, thermalMult: 1.95, airKw: 0.85, warmupScale: 1.50, sheetMult: 2.20, rates: { oem: 32.83, pm: 9.50, none: 0.0 } }
+  };
+
+  const MATERIALS = {
+    "ABS": { name: "ABS-M30 / ASA", highTemp: false, baseKw: 2.25, baseWarmupHr: 0.35, oemModel: 4.94, oemSupport: 4.94, openModel: 1.30, openSupport: 1.30, baseSheetCost: 12.00, tipCost: 190.00, tipLifeIn3: 750, washPerIn3: 0.35, washFixedEnergy: 1.10 },
+    "PC": { name: "PC / PC-ABS", highTemp: false, baseKw: 3.55, baseWarmupHr: 0.60, oemModel: 6.00, oemSupport: 5.19, openModel: 1.78, openSupport: 1.59, baseSheetCost: 15.00, tipCost: 190.00, tipLifeIn3: 650, washPerIn3: 0.35, washFixedEnergy: 1.25 },
+    "N12CF": { name: "Nylon 12CF", highTemp: false, baseKw: 2.45, baseWarmupHr: 0.45, oemModel: 8.55, oemSupport: 5.19, openModel: 3.08, openSupport: 1.68, baseSheetCost: 15.00, tipCost: 340.00, tipLifeIn3: 450, washPerIn3: 0.35, washFixedEnergy: 1.25 },
+    "ULTEM9085": { name: "ULTEM 9085", highTemp: true, baseKw: 4.50, baseWarmupHr: 1.00, oemModel: 9.65, oemSupport: 9.16, openModel: 4.90, openSupport: 4.62, baseSheetCost: 22.00, tipCost: 240.00, tipLifeIn3: 500, washPerIn3: 0.00, washFixedEnergy: 0.00 },
+    "ULTEM1010": { name: "ULTEM 1010 / PPSF", highTemp: true, baseKw: 5.85, baseWarmupHr: 1.25, oemModel: 10.76, oemSupport: 9.42, openModel: 5.38, openSupport: 4.76, baseSheetCost: 24.00, tipCost: 240.00, tipLifeIn3: 500, washPerIn3: 0.00, washFixedEnergy: 0.00 }
+  };
+
+  const $ = id => document.getElementById(id);
+  const elMachine = $('fc-machine'), elMaterial = $('fc-material'), elSource = $('fc-filament-source'), elOverhead = $('fc-overhead-mode');
+  const elVolModel = $('fc-vol-model'), elVolSupport = $('fc-vol-support'), elTimeHrs = $('fc-time-hrs');
+  const elColdStart = $('fc-cold-start'), elHvacLoad = $('fc-hvac-load');
+  const elRateKwh = $('fc-rate-kwh'), elWastePct = $('fc-waste-pct'), elLaborHrs = $('fc-labor-hrs'), elLaborRate = $('fc-labor-rate'), elScrapPct = $('fc-scrap-pct');
+  const elOverrideModel = $('fc-override-model'), elOverrideSupport = $('fc-override-support'), elAlert = $('fc-compat-alert');
+
+  const fmtMoney = val => '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const TAG = ' (Requires 400/450/900)';
+
+  function checkCompatibility(changedByMachine) {
+    const mach = MACHINES[elMachine.value];
+    const mat = MATERIALS[elMaterial.value];
+
+    Array.from(elMaterial.options).forEach(opt => {
+      const mData = MATERIALS[opt.value];
+      if (!mData) return;
+      const base = opt.textContent.replace(TAG, '');
+      if (mData.highTemp && !mach.highTempCapable) { opt.disabled = true; opt.textContent = base + TAG; }
+      else { opt.disabled = false; opt.textContent = base; }
+    });
+
+    if (mat.highTemp && !mach.highTempCapable) {
+      if (changedByMachine) {
+        elMaterial.value = 'PC';
+        elAlert.textContent = `${mach.name} can't run high-temperature polymers like ${mat.name}. Material switched to PC / PC-ABS.`;
+      } else {
+        elMachine.value = '450mc';
+        elAlert.textContent = `${mat.name} needs a high-temperature system. Machine switched to Fortus 450mc.`;
+      }
+      elAlert.style.display = 'block';
+    } else {
+      elAlert.style.display = 'none';
+    }
+  }
+
+  function calculate() {
+    const mach = MACHINES[elMachine.value];
+    const mat = MATERIALS[elMaterial.value];
+    const isOemFilament = elSource.value === 'oem';
+    const overheadMode = elOverhead.value;
+
+    const volModel = Math.max(0, parseFloat(elVolModel.value) || 0);
+    const volSupport = Math.max(0, parseFloat(elVolSupport.value) || 0);
+    const totalVol = volModel + volSupport;
+    const buildHrs = Math.max(0, parseFloat(elTimeHrs.value) || 0);
+
+    const rateKwh = Math.max(0, parseFloat(elRateKwh.value) || 0);
+    const wasteFactor = Math.min(0.9, Math.max(0, (parseFloat(elWastePct.value) || 0) / 100));
+    const laborHrs = Math.max(0, parseFloat(elLaborHrs.value) || 0);
+    const laborRate = Math.max(0, parseFloat(elLaborRate.value) || 0);
+    const scrapFactor = Math.max(0, (parseFloat(elScrapPct.value) || 0) / 100);
+
+    // 1. Material (with canister tail waste)
+    const wasteMult = 1 / (1 - wasteFactor);
+    const baseModelRate = isOemFilament ? mat.oemModel : mat.openModel;
+    const baseSupportRate = isOemFilament ? mat.oemSupport : mat.openSupport;
+    const customModel = parseFloat(elOverrideModel.value);
+    const customSupport = parseFloat(elOverrideSupport.value);
+    const effModelRate = !isNaN(customModel) ? customModel : (baseModelRate * wasteMult);
+    const effSupportRate = !isNaN(customSupport) ? customSupport : (baseSupportRate * wasteMult);
+    const costMaterial = (volModel * effModelRate) + (volSupport * effSupportRate);
+
+    // 2. Consumables
+    const effSheetCost = mat.baseSheetCost * mach.sheetMult;
+    const tipWearRate = mat.tipCost / mat.tipLifeIn3;
+    const costConsumables = effSheetCost + totalVol * tipWearRate;
+
+    // 3. Energy
+    const warmupFull = mat.baseWarmupHr * mach.warmupScale;
+    const warmupHrs = elColdStart.checked ? warmupFull : 0;
+    $('fc-warmup-label').textContent = warmupFull.toFixed(2) + ' hr';
+    const totalMachineHrs = buildHrs + warmupHrs;
+    const chamberKw = (mat.baseKw * mach.thermalMult) + mach.airKw;
+    const effectiveKw = chamberKw * (elHvacLoad.checked ? 1.33 : 1.00);
+    const costEnergy = totalMachineHrs * effectiveKw * rateKwh;
+
+    // 4. Machine overhead
+    const machHourlyRate = mach.rates[overheadMode];
+    const costMachine = totalMachineHrs * machHourlyRate;
+
+    // 5. Post-processing
+    let costPost = 0;
+    if (volSupport > 0 && mat.washPerIn3 > 0) costPost = (volSupport * mat.washPerIn3) + mat.washFixedEnergy;
+
+    // 6. Labor
+    const costLabor = laborHrs * laborRate;
+
+    const subTotal = costMaterial + costConsumables + costEnergy + costMachine + costPost + costLabor;
+    const costScrap = subTotal * scrapFactor;
+    const grandTotal = subTotal + costScrap;
+    const marginalCost = costMaterial + costConsumables + costEnergy + costPost;
+
+    $('fc-active-summary').textContent = `${mach.name} · ${mat.name}`;
+    $('fc-out-total').textContent = fmtMoney(grandTotal);
+    $('fc-out-scrap-note').textContent = `Includes ${(scrapFactor * 100).toFixed(1)}% scrap allowance (${fmtMoney(costScrap)})`;
+    $('fc-out-marginal').textContent = fmtMoney(marginalCost);
+    $('fc-out-per-in3').textContent = totalVol > 0 ? fmtMoney(grandTotal / totalVol) : '$0.00';
+    $('fc-out-per-hr').textContent = buildHrs > 0 ? `${fmtMoney(grandTotal / buildHrs)} / build hr` : '$0.00 / build hr';
+
+    const denom = grandTotal > 0 ? grandTotal : 1;
+    const barDenom = subTotal > 0 ? subTotal : 1;
+    const parts = { mat: costMaterial, cons: costConsumables, energy: costEnergy, mach: costMachine, post: costPost, labor: costLabor };
+    Object.entries(parts).forEach(([k, v]) => {
+      $('seg-' + k).style.width = ((v / barDenom) * 100) + '%';
+      $('pct-' + k).textContent = ((v / denom) * 100).toFixed(1) + '%';
+      $('val-' + k).textContent = fmtMoney(v);
+    });
+    $('pct-scrap').textContent = ((costScrap / denom) * 100).toFixed(1) + '%';
+    $('val-scrap').textContent = fmtMoney(costScrap);
+    $('val-total-table').textContent = fmtMoney(grandTotal);
+
+    $('desc-mat').textContent = `${volModel.toFixed(2)} in³ × ${fmtMoney(effModelRate)} + ${volSupport.toFixed(2)} in³ × ${fmtMoney(effSupportRate)}`;
+    $('desc-cons').textContent = `${fmtMoney(effSheetCost)} sheet + ${totalVol.toFixed(1)} in³ × ${fmtMoney(tipWearRate)} tip wear`;
+    $('desc-energy').textContent = `${totalMachineHrs.toFixed(2)} h (${buildHrs.toFixed(2)} print + ${warmupHrs.toFixed(2)} soak) × ${effectiveKw.toFixed(2)} kW × $${rateKwh.toFixed(2)}`;
+    $('desc-mach').textContent = `${totalMachineHrs.toFixed(2)} h × ${fmtMoney(machHourlyRate)}/hr · ${overheadMode.toUpperCase()}`;
+    $('desc-post').textContent = mat.washPerIn3 > 0
+      ? `${volSupport.toFixed(2)} in³ × $${mat.washPerIn3.toFixed(2)} + $${mat.washFixedEnergy.toFixed(2)} bath heat`
+      : `Breakaway support · no wash tank cost`;
+    $('desc-labor').textContent = `${laborHrs.toFixed(2)} h × ${fmtMoney(laborRate)}/hr`;
+    $('desc-scrap').textContent = `${(scrapFactor * 100).toFixed(1)}% of ${fmtMoney(subTotal)}`;
+  }
+
+  elMachine.addEventListener('change', () => { checkCompatibility(true); calculate(); });
+  elMaterial.addEventListener('change', () => { checkCompatibility(false); calculate(); });
+  document.querySelectorAll('.fortus-calc-wrapper input, .fortus-calc-wrapper select').forEach(input => {
+    if (input !== elMachine && input !== elMaterial) {
+      input.addEventListener('input', calculate);
+      input.addEventListener('change', calculate);
+    }
+  });
+
+  checkCompatibility(true);
+  calculate();
+})();
+</script>
